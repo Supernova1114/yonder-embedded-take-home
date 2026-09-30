@@ -79,9 +79,17 @@ class OdometryNode(Node):
         # Hint: the QoS profile you need looks like:
         #   QoSProfile(reliability=ReliabilityPolicy.???, depth=10)
         #
-        # self.tick_sub = self.create_subscription(
-        #     WheelTicks, "/wheel_ticks", self.wheel_tick_callback, ???
-        # )
+
+        self.tick_sub = self.create_subscription(
+            WheelTicks, 
+            "/wheel_ticks", 
+            self.wheel_tick_callback, 
+            QoSProfile(
+                reliability=ReliabilityPolicy.BEST_EFFORT,
+                durability=DurabilityPolicy.VOLATILE,
+                depth=10,
+            )
+        )
 
         # TODO: Create a subscriber for /gps_estimate (same QoS considerations).
         #
@@ -169,6 +177,9 @@ class OdometryNode(Node):
         #      heading come from and how does it change? See "Heading is not
         #      measured" in the README before you write this line.
         #   6. Call self.publish_odometry().
+        
+        print(msg.tick_count)
+
         pass
 
     # -----------------------------------------------------------------------
