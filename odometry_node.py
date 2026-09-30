@@ -31,6 +31,7 @@ if __name__ == "__main__":
 
 import math
 import time
+from math import atan2, sin, cos
 
 import rclpy_lite as rclpy
 from rclpy_lite.node import Node
@@ -42,6 +43,8 @@ from sim.messages import WheelTicks, GPSEstimate
 # Standard ROS message types (mirrored by the shim)
 from nav_msgs.msg import Odometry
 from geometry_msgs.msg import Quaternion
+
+import numpy as np
 
 # --------------------------------------------------------------------------
 # Constants  (do not change — these match the real rover's encoder setup)
@@ -93,9 +96,16 @@ class OdometryNode(Node):
 
         # TODO: Create a subscriber for /gps_estimate (same QoS considerations).
         #
-        # self.gps_sub = self.create_subscription(
-        #     GPSEstimate, "/gps_estimate", self.gps_callback, ???
-        # )
+        self.gps_sub = self.create_subscription(
+            GPSEstimate, 
+            "/gps_estimate", 
+            self.gps_callback,
+            QoSProfile(
+                reliability=ReliabilityPolicy.BEST_EFFORT,
+                durability=DurabilityPolicy.VOLATILE,
+                depth=10,
+            )
+        )
 
         # ------------------------------------------------------------------
         # Publisher
@@ -118,6 +128,9 @@ class OdometryNode(Node):
         self.y: float = 0.0                  # fused position, metres (north)
         self.heading: float = 0.0            # radians. The rover starts facing EAST (0 rad);
                                              # x is east, y is north, counter-clockwise is positive
+
+        self.last_x: float = 0.0
+        self.last_y: float = 0.0
 
         self.last_tick_count: int | None = None
         self.last_tick_time: float | None = None
@@ -190,10 +203,11 @@ class OdometryNode(Node):
             return
 
         distance = delta_ticks * DIST_PER_TICK
-        velocity = delta_ticks / delta_time
-        
-        self.x = distance
-        self.y = 0  
+        speed = delta_ticks / delta_time
+
+        self.x = distance * cos(self.heading)
+        self.y = distance * sin(self.heading)
+        # print(math.degrees(self.heading))
 
         self.publish_odometry()
 
@@ -231,7 +245,23 @@ class OdometryNode(Node):
         #   2. Blend: self.x = (1 - w_gps) * self.x + w_gps * msg.x
         #             self.y = (1 - w_gps) * self.y + w_gps * msg.y
         #   3. Update self.last_gps_time = msg.timestamp
-        pass
+
+        MAX_TRUSTABLE_COV = 1.0 # m^2
+
+        w_gps = 1 - np.clip(msg.covariance, 0.0, MAX_TRUSTABLE_COV) / MAX_TRUSTABLE_COV
+
+        self.x = (1 - w_gps) * self.x + w_gps * msg.x
+        self.y = (1 - w_gps) * self.y + w_gps * msg.y
+
+        self.heading = atan2(self.y - self.last_y, self.x - self.last_x)
+
+        self.last_x = self.x
+        self.last_y = self.y
+        print(self.last_y, self.last_x)
+
+        self.last_gps_time = msg.timestamp
+
+
 
     # -----------------------------------------------------------------------
     # Odometry publisher
@@ -268,6 +298,16 @@ class OdometryNode(Node):
 
         msg.pose.pose.position.x = self.x
         msg.pose.pose.position.y = 0
+
+        z = sin(self.heading / 2)
+        w = cos(self.heading / 2)
+        x = 0
+        y = 0
+
+        msg.pose.pose.orientation.x = x
+        msg.pose.pose.orientation.y = y
+        msg.pose.pose.orientation.z = z
+        msg.pose.pose.orientation.w = w
 
         self.odom_pub.publish(msg)
 
