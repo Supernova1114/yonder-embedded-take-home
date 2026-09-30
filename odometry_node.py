@@ -202,12 +202,15 @@ class OdometryNode(Node):
         if (delta_ticks == 0 or delta_time <= 0):
             return
 
-        distance = delta_ticks * DIST_PER_TICK
+        delta_distance = delta_ticks * DIST_PER_TICK
         speed = delta_ticks / delta_time
 
-        self.x = distance * cos(self.heading)
-        self.y = distance * sin(self.heading)
+        self.x += delta_distance * delta_time * cos(self.heading)
+        self.y += delta_distance * delta_time * sin(self.heading)
         # print(math.degrees(self.heading))
+
+        self.last_tick_count = msg.tick_count
+        self.last_tick_time = msg.timestamp
 
         self.publish_odometry()
 
@@ -297,17 +300,17 @@ class OdometryNode(Node):
         msg.child_frame_id = "base_link"
 
         msg.pose.pose.position.x = self.x
-        msg.pose.pose.position.y = 0
+        msg.pose.pose.position.y = self.y
 
         z = sin(self.heading / 2)
         w = cos(self.heading / 2)
         x = 0
         y = 0
 
-        msg.pose.pose.orientation.x = x
-        msg.pose.pose.orientation.y = y
-        msg.pose.pose.orientation.z = z
-        msg.pose.pose.orientation.w = w
+        # msg.pose.pose.orientation.x = x
+        # msg.pose.pose.orientation.y = y
+        # msg.pose.pose.orientation.z = z
+        # msg.pose.pose.orientation.w = w
 
         self.odom_pub.publish(msg)
 
