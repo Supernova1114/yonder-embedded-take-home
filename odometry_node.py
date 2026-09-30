@@ -186,6 +186,9 @@ class OdometryNode(Node):
         delta_ticks = msg.tick_count - self.last_tick_count
         delta_time = msg.timestamp - self.last_tick_time
 
+        if (delta_ticks == 0 or delta_time <= 0):
+            return
+
         distance = delta_ticks * DIST_PER_TICK
         velocity = delta_ticks / delta_time
         
