@@ -32,6 +32,7 @@ if __name__ == "__main__":
 import math
 import time
 from math import atan2, sin, cos
+from collections import deque
 
 import rclpy_lite as rclpy
 from rclpy_lite.node import Node
@@ -140,6 +141,8 @@ class OdometryNode(Node):
 
         self.wheel_msg_count: int = 0
         self.start_time: float = time.monotonic()   # use time.monotonic() to measure durations
+
+        self.heading_buffer: deque = deque()
 
     # -----------------------------------------------------------------------
     # Wheel encoder callback
@@ -256,11 +259,19 @@ class OdometryNode(Node):
         self.x = (1 - w_gps) * self.x + w_gps * msg.x
         self.y = (1 - w_gps) * self.y + w_gps * msg.y
 
-        self.heading = atan2(self.y - self.last_y, self.x - self.last_x)
+        HEADING_BUFFER_MAX_LEN = 3
+        # Average a few heading points
+        if len(self.heading_buffer) >= HEADING_BUFFER_MAX_LEN:
+            self.heading_buffer.popleft() # Pop from left of buffer
+
+        self.heading_buffer.append((self.x, self.y)) # Add to right of buffer
+
+        avg_x, avg_y = np.sum(self.heading_buffer, axis=0) / len(self.heading_buffer)
+
+        self.heading = atan2(avg_y - self.last_y, avg_x - self.last_x)
 
         self.last_x = self.x
         self.last_y = self.y
-        print(self.last_y, self.last_x)
 
         self.last_gps_time = msg.timestamp
 
@@ -307,10 +318,10 @@ class OdometryNode(Node):
         x = 0
         y = 0
 
-        # msg.pose.pose.orientation.x = x
-        # msg.pose.pose.orientation.y = y
-        # msg.pose.pose.orientation.z = z
-        # msg.pose.pose.orientation.w = w
+        msg.pose.pose.orientation.x = x
+        msg.pose.pose.orientation.y = y
+        msg.pose.pose.orientation.z = z
+        msg.pose.pose.orientation.w = w
 
         self.odom_pub.publish(msg)
 
