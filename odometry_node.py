@@ -252,7 +252,7 @@ class OdometryNode(Node):
         #             self.y = (1 - w_gps) * self.y + w_gps * msg.y
         #   3. Update self.last_gps_time = msg.timestamp
 
-        MAX_TRUSTABLE_COV = 1.0 # m^2
+        MAX_TRUSTABLE_COV = 0.4 # m^2
 
         w_gps = 1 - np.clip(msg.covariance, 0.0, MAX_TRUSTABLE_COV) / MAX_TRUSTABLE_COV
 
