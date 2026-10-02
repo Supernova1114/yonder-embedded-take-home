@@ -54,8 +54,8 @@ WHEEL_RADIUS_M = 0.075          # metres
 TICKS_PER_REVOLUTION = 360
 DIST_PER_TICK = (2.0 * math.pi * WHEEL_RADIUS_M) / TICKS_PER_REVOLUTION  # ~0.00131 m
 
-# Heading from GPS history
-HEADING_BUFFER_MAX_LEN = 4
+HEADING_BUFFER_MAX_LEN = 4 # Number of points used in directional vector averaging
+MAX_W_GPS = 0.5 # range 0-1
 
 class OdometryNode(Node):
     """
@@ -267,7 +267,7 @@ class OdometryNode(Node):
 
         w_gps = 1 - np.clip(msg.covariance, 0.0, MAX_TRUSTABLE_COV) / MAX_TRUSTABLE_COV
 
-        w_gps = 0.5 * w_gps
+        w_gps = MAX_W_GPS * w_gps
 
         self.x = (1 - w_gps) * self.x + w_gps * msg.x
         self.y = (1 - w_gps) * self.y + w_gps * msg.y
