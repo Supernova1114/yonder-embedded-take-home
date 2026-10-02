@@ -54,6 +54,8 @@ WHEEL_RADIUS_M = 0.075          # metres
 TICKS_PER_REVOLUTION = 360
 DIST_PER_TICK = (2.0 * math.pi * WHEEL_RADIUS_M) / TICKS_PER_REVOLUTION  # ~0.00131 m
 
+# Heading from GPS history
+HEADING_BUFFER_MAX_LEN = 4
 
 class OdometryNode(Node):
     """
@@ -130,9 +132,6 @@ class OdometryNode(Node):
         self.heading: float = 0.0            # radians. The rover starts facing EAST (0 rad);
                                              # x is east, y is north, counter-clockwise is positive
 
-        self.last_x: float = 0.0
-        self.last_y: float = 0.0
-
         self.last_tick_count: int | None = None
         self.last_tick_time: float | None = None
 
@@ -142,7 +141,7 @@ class OdometryNode(Node):
         self.wheel_msg_count: int = 0
         self.start_time: float = time.monotonic()   # use time.monotonic() to measure durations
 
-        self.heading_buffer: deque = deque()
+        self.heading_buffer: deque = deque(maxlen=HEADING_BUFFER_MAX_LEN)   # raw GPS (x, y)
 
     # -----------------------------------------------------------------------
     # Wheel encoder callback
@@ -208,9 +207,9 @@ class OdometryNode(Node):
         delta_distance = delta_ticks * DIST_PER_TICK
         speed = delta_ticks / delta_time
 
-        self.x += delta_distance * delta_time * cos(self.heading)
-        self.y += delta_distance * delta_time * sin(self.heading)
-        # print(math.degrees(self.heading))
+
+        self.x += delta_distance * cos(self.heading)
+        self.y += delta_distance * sin(self.heading)
 
         self.last_tick_count = msg.tick_count
         self.last_tick_time = msg.timestamp
@@ -252,29 +251,32 @@ class OdometryNode(Node):
         #             self.y = (1 - w_gps) * self.y + w_gps * msg.y
         #   3. Update self.last_gps_time = msg.timestamp
 
-        MAX_TRUSTABLE_COV = 0.4 # m^2
+        # print(msg.covariance, msg.x, msg.y, self.x, self.y)
+
+        MAX_TRUSTABLE_COV = 1.0 # m^2
 
         w_gps = 1 - np.clip(msg.covariance, 0.0, MAX_TRUSTABLE_COV) / MAX_TRUSTABLE_COV
+
+        # print(msg.covariance)
+        # print(w_gps)
+
+        w_gps = 0.5 * w_gps
 
         self.x = (1 - w_gps) * self.x + w_gps * msg.x
         self.y = (1 - w_gps) * self.y + w_gps * msg.y
 
-        HEADING_BUFFER_MAX_LEN = 3
-        # Average a few heading points
-        if len(self.heading_buffer) >= HEADING_BUFFER_MAX_LEN:
-            self.heading_buffer.popleft() # Pop from left of buffer
+        self.heading_buffer.append((self.x, self.y)) # Does not need pop as the maxlen param takes care of this.
+        
+        if len(self.heading_buffer) >= 2:
 
-        self.heading_buffer.append((self.x, self.y)) # Add to right of buffer
+            pts = np.array(self.heading_buffer)
 
-        avg_x, avg_y = np.sum(self.heading_buffer, axis=0) / len(self.heading_buffer)
+            dir_vecs = np.diff(pts, axis=0) # Get directional vector between each position
+            mean_dx, mean_dy = dir_vecs.mean(axis=0)
 
-        self.heading = atan2(avg_y - self.last_y, avg_x - self.last_x)
-
-        self.last_x = self.x
-        self.last_y = self.y
+            self.heading = atan2(mean_dy, mean_dx)
 
         self.last_gps_time = msg.timestamp
-
 
 
     # -----------------------------------------------------------------------
@@ -313,15 +315,15 @@ class OdometryNode(Node):
         msg.pose.pose.position.x = self.x
         msg.pose.pose.position.y = self.y
 
-        z = sin(self.heading / 2)
-        w = cos(self.heading / 2)
-        x = 0
-        y = 0
+        # z = sin(self.heading / 2)
+        # w = cos(self.heading / 2)
+        # x = 0
+        # y = 0
 
-        msg.pose.pose.orientation.x = x
-        msg.pose.pose.orientation.y = y
-        msg.pose.pose.orientation.z = z
-        msg.pose.pose.orientation.w = w
+        # msg.pose.pose.orientation.x = x
+        # msg.pose.pose.orientation.y = y
+        # msg.pose.pose.orientation.z = z
+        # msg.pose.pose.orientation.w = w
 
         self.odom_pub.publish(msg)
 
