@@ -395,13 +395,14 @@ We don't expect a perfect implementation. Those who show genuine effort and lear
 
 *Candidates: replace this section with your own short write-up. Keep it to what a teammate would need to trust your implementation.*
 
-- **Fusion approach.** How do you weight GPS vs wheel odometry? Does the weighting change over time or with signal quality?
-- **Heading.** Where does your heading (and its rate of change) come from? What did you assume about the path, and what would break your approach?
-- **Noise handling.** What did you detect, how, and what happens when you detect it? Which noise can't be detected, and how do you know it is affecting your estimate without correction?
-- **Monitoring output.** What thresholds did you choose for staleness warnings and why?
-- **Ambiguity.** What did the task leave underspecified, and what call did you make?
-- **Testing.** How did you verify it was actually working correctly, not just running? What did you check with `--visualize`?
-- **Stretch goals.** Which did you attempt, and how far did you get?
+- **Fusion approach.** For the gps weighting, I chose to make a linear weight based off of a MAX_TRUSTABLE_COV value, which I chose to be 1.0 m^2 as generally the simulated covariance stayed below this value, and a gnss variance above this may not be as useful. The maximum weight is also capped to MAX_W_GPS, which I chose to be 0.5 in order to reduce how much the gnss samples are allowed to pull on the odom.
+- **Heading.** For, heading I decided to use the vector between two adjacent gnss samples. Then I created an averages of a few of these vectors, and then converted the averaged vector into a heading in radians. I did this so that noise from the gnss samples does not wildly change the heading.
+- **Noise handling.** For the wheel ticks, I got rid of duplicate tick messages if the change in ticks between messages was zero. I also ignored the message if the time between timestamps was <= zero. Missing ticks from the encoder cannot be detected. This would affect the estimation by slowly reducing the distance of odom from the actual position. The corrections fix odom.
+
+- **Monitoring output.** I chose 40 hz for wheel tick staleness because under this value there may be issues with performance in the odometry system that needs to be looked over. I chose 1.5 seconds for gnss stale threshold as the gnss is expected to be published every 1 second.
+- **Ambiguity.** I had to implement my own weight function for gnss fusion, and also decided to improve the heading.
+- **Testing.** Verified via the --visualize flag, seeing that the odom properly follows the groung truth most of the time, and tends to converge pretty quickly after stale gnss. Odom error being less than gnss error most of the time.
+- **Stretch goals.** NA
 
 ---
 

@@ -57,6 +57,9 @@ DIST_PER_TICK = (2.0 * math.pi * WHEEL_RADIUS_M) / TICKS_PER_REVOLUTION  # ~0.00
 HEADING_BUFFER_MAX_LEN = 4 # Number of points used in directional vector averaging
 MAX_W_GPS = 0.5 # range 0-1
 
+WHEEL_TICK_STALE_FREQ_THRESH = 40 # Hz
+GPS_EST_STALE_THRESH = 1.5 # Sec
+
 class OdometryNode(Node):
     """
     Fuses wheel encoder ticks with GPS estimates to produce odometry.
@@ -198,10 +201,6 @@ class OdometryNode(Node):
         #      heading come from and how does it change? See "Heading is not
         #      measured" in the README before you write this line.
         #   6. Call self.publish_odometry().
-        
-        current_time = time.monotonic()
-        self.wheel_tick_cb_period = current_time - self.wheel_pub_last_time
-        self.wheel_pub_last_time = current_time
 
         if self.last_tick_count is None:
             self.last_tick_count = msg.tick_count
@@ -221,6 +220,11 @@ class OdometryNode(Node):
 
         self.last_tick_count = msg.tick_count
         self.last_tick_time = msg.timestamp
+
+        # Monitoring
+        current_time = time.monotonic()
+        self.wheel_tick_cb_period = current_time - self.wheel_pub_last_time
+        self.wheel_pub_last_time = current_time
 
         self.publish_odometry()
 
@@ -259,10 +263,6 @@ class OdometryNode(Node):
         #             self.y = (1 - w_gps) * self.y + w_gps * msg.y
         #   3. Update self.last_gps_time = msg.timestamp
 
-        current_time = time.monotonic()
-        self.gps_cb_period = current_time - self.gps_pub_last_time
-        self.gps_pub_last_time = current_time
-
         MAX_TRUSTABLE_COV = 1.0 # m^2
 
         w_gps = 1 - np.clip(msg.covariance, 0.0, MAX_TRUSTABLE_COV) / MAX_TRUSTABLE_COV
@@ -285,6 +285,11 @@ class OdometryNode(Node):
 
 
         self.last_gps_time = msg.timestamp
+
+        # Monitoring
+        current_time = time.monotonic()
+        self.gps_cb_period = current_time - self.gps_pub_last_time
+        self.gps_pub_last_time = current_time
 
 
     # -----------------------------------------------------------------------
@@ -364,6 +369,13 @@ class OdometryNode(Node):
                     + f"  gps={self.gps_cb_period:.2f}s ago"
         
         print(output)
+
+        if wheel_tick_freq < WHEEL_TICK_STALE_FREQ_THRESH:
+            print("Wheel tick pub rate is slow!!!")
+
+        if self.gps_cb_period > GPS_EST_STALE_THRESH:
+            print("GNSS pub rate is slow!!!!")
+
 
 
 # ---------------------------------------------------------------------------
