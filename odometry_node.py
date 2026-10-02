@@ -122,7 +122,7 @@ class OdometryNode(Node):
         # ------------------------------------------------------------------
         # TODO: Create a timer that calls self.monitoring_callback once per second.
         #
-        # self.monitor_timer = self.create_timer(1.0, self.monitoring_callback)
+        self.monitor_timer = self.create_timer(1.0, self.monitoring_callback)
 
         # ------------------------------------------------------------------
         # State  — add whatever you need
@@ -142,6 +142,12 @@ class OdometryNode(Node):
         self.start_time: float = time.monotonic()   # use time.monotonic() to measure durations
 
         self.heading_buffer: deque = deque(maxlen=HEADING_BUFFER_MAX_LEN)   # raw GPS (x, y)
+
+        # Monitoring
+        self.wheel_pub_last_time: float = 0.0
+        self.gps_pub_last_time: float = 0.0
+        self.wheel_tick_cb_period: float = 0.0
+        self.gps_cb_period: float = 0.0
 
     # -----------------------------------------------------------------------
     # Wheel encoder callback
@@ -193,6 +199,10 @@ class OdometryNode(Node):
         #      measured" in the README before you write this line.
         #   6. Call self.publish_odometry().
         
+        current_time = time.monotonic()
+        self.wheel_tick_cb_period = current_time - self.wheel_pub_last_time
+        self.wheel_pub_last_time = current_time
+
         if self.last_tick_count is None:
             self.last_tick_count = msg.tick_count
             self.last_tick_time = msg.timestamp
@@ -205,8 +215,6 @@ class OdometryNode(Node):
             return
 
         delta_distance = delta_ticks * DIST_PER_TICK
-        speed = delta_ticks / delta_time
-
 
         self.x += delta_distance * cos(self.heading)
         self.y += delta_distance * sin(self.heading)
@@ -251,14 +259,13 @@ class OdometryNode(Node):
         #             self.y = (1 - w_gps) * self.y + w_gps * msg.y
         #   3. Update self.last_gps_time = msg.timestamp
 
-        # print(msg.covariance, msg.x, msg.y, self.x, self.y)
+        current_time = time.monotonic()
+        self.gps_cb_period = current_time - self.gps_pub_last_time
+        self.gps_pub_last_time = current_time
 
         MAX_TRUSTABLE_COV = 1.0 # m^2
 
         w_gps = 1 - np.clip(msg.covariance, 0.0, MAX_TRUSTABLE_COV) / MAX_TRUSTABLE_COV
-
-        # print(msg.covariance)
-        # print(w_gps)
 
         w_gps = 0.5 * w_gps
 
@@ -275,6 +282,7 @@ class OdometryNode(Node):
             mean_dx, mean_dy = dir_vecs.mean(axis=0)
 
             self.heading = atan2(mean_dy, mean_dx)
+
 
         self.last_gps_time = msg.timestamp
 
@@ -348,8 +356,14 @@ class OdometryNode(Node):
         Example format (feel free to change the layout):
             [odom] pos=(1.23, 0.45)m  enc=0.02s ago @49.8Hz  gps=0.91s ago
         """
-        # TODO: implement
-        pass
+
+        wheel_tick_freq = (1.0 / self.wheel_tick_cb_period) if self.wheel_tick_cb_period > 0.0 else 0.0
+
+        output = f"[odom] pos=({self.x:.2f}, {self.y:.2f})m" \
+                    + f"  enc={self.wheel_tick_cb_period:.2f}s ago @{wheel_tick_freq:.2f}Hz" \
+                    + f"  gps={self.gps_cb_period:.2f}s ago"
+        
+        print(output)
 
 
 # ---------------------------------------------------------------------------
